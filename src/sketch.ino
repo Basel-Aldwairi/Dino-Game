@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <LiquidCrystal.h>
+#include <math.h>
 
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
@@ -17,14 +18,18 @@ long time_last_jump = 0;
 int jump_delay = 300;
 long time_last_fall = 0;
 
-int min_time_between_obstacle = 500;
+int min_time_between_obstacle = 200;
 long time_between_obstacle = 0;
 int time_between_scenery_move = 200;
 long time_scenery_moved = 0;
 int previous_obstacle = 0;
+long time_game_draw = 0;
+long min_time_between_game_draw = 50;
 
 int min_time_between_lane_toggle = 100;
 long last_lane_toggle_time = 0;
+
+int current_game_speed = 200;
 
 long game_time_start = millis();
 
@@ -93,14 +98,15 @@ void toggle_lane()
 {
   int since_last_lane_toggle = millis() - last_lane_toggle_time;
 
-  if (since_last_lane_toggle < min_time_between_lane_toggle) return;
+  if (since_last_lane_toggle < min_time_between_lane_toggle)
+    return;
 
   if (player_state == 0)
     player_state = 1;
   else
     player_state = 0;
-  
-    last_lane_toggle_time = millis();
+
+  last_lane_toggle_time = millis();
 }
 
 void put_player_in_game()
@@ -120,7 +126,7 @@ void move_scenery()
 
   int time_last_scenery = millis() - time_scenery_moved;
 
-  if (time_last_scenery < time_between_scenery_move)
+  if (time_last_scenery < current_game_speed)
     return;
 
   for (int i = 0; i < rows; i++)
@@ -179,14 +185,14 @@ void add_obstacle()
     return;
   }
 
-  if (obstacle == 1 || obstacle == 2 && previous_obstacle == 1)
+  if (obstacle == 1 && previous_obstacle != 2 || obstacle == 2 && previous_obstacle == 1)
   {
     game_array[1][cols - 1] = 2;
     previous_obstacle = 1;
     return;
   }
 
-  if (obstacle == 2 || obstacle == 1 && previous_obstacle == 2)
+  if (obstacle == 2 && previous_obstacle != 1 || obstacle == 1 && previous_obstacle == 2)
   {
     game_array[0][cols - 1] = 2;
     previous_obstacle = 2;
@@ -213,6 +219,19 @@ void lose_screen()
   lcd.print(" s");
 }
 
+void draw_game()
+{
+
+  // int time_last_game_draw = millis() - time_game_draw;
+
+  // if (time_last_game_draw < min_time_between_game_draw)
+  //   return;
+
+  lcd.clear();
+  print_lcd_graphics();
+  put_player_in_game_graphics();
+}
+
 void collision_logic()
 {
   if (is_collision())
@@ -222,9 +241,7 @@ void collision_logic()
   }
   else
   {
-    lcd.clear();
-    print_lcd_graphics();
-    put_player_in_game_graphics();
+    draw_game();
   }
 }
 
@@ -283,6 +300,13 @@ void clear_game_array()
   }
 }
 
+void game_speed_up()
+{
+  long game_time = millis() - game_time_start;
+  float speed_up = 1.0 / (1.0 + ((float)game_time / 40000));
+  current_game_speed = (int)(time_between_scenery_move * speed_up);
+}
+
 void setup()
 {
 
@@ -310,15 +334,10 @@ void loop()
       // jump();
       toggle_lane();
     }
-    // fall();
 
-    // add_obstacle();
     move_scenery();
     collision_logic();
-
-    // Serial.println("\n\n\n\n\n\n\n\n\n\n");
-    // print_array();
-    // print_lcd();
+    game_speed_up();
 
     delay(50);
   }
@@ -331,6 +350,7 @@ void loop()
 
       delay(200);
       game_time_start = millis();
+      current_game_speed = 200;
       Serial.println(game_time_start / 1000);
     }
   }
